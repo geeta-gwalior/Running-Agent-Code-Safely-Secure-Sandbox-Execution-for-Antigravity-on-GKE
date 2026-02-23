@@ -1,0 +1,246 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1.0, user-scalable=yes">
+    <meta name="theme-color" content="#4F7DC9">
+    <title>Running Agent Code Safely: Secure Sandbox Execution for Antigravity on GKE</title>
+
+    <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Source+Code+Pro:400|Roboto:400,300,400italic,500,700|Roboto+Mono">
+    <link rel="stylesheet" href="//fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="stylesheet" href="https://storage.googleapis.com/claat-public/codelab-elements.css">
+
+    <style>
+      .success { color: #1e8e3e; }
+      .error { color: red; }
+    </style>
+  </head>
+
+  <body>
+    <google-codelab-analytics gaid="UA-49880327-14" ga4id=""></google-codelab-analytics>
+
+    <google-codelab
+      codelab-gaid=""
+      codelab-ga4id=""
+      id="secure-agent-sandbox-gke"
+      title="Running Agent Code Safely: Secure Sandbox Execution for Antigravity on GKE"
+      environment="web"
+      feedback-link="https://www.google.com/search?q=https://github.com/geetakakrani"
+    >
+
+      <google-codelab-step label="Introduction: The Need for a &#34;Safe Room&#34;" duration="5">
+        <p>
+          When we build agents using <strong>Antigravity</strong>, we are giving an AI the power to think and act. Often,
+          that &#34;act&#34; involves writing and running Python code to process complex data.
+        </p>
+
+        <h2 is-upgraded><strong>The Problem</strong></h2>
+        <p>
+          If the AI generates a script that contains a bug—or if it is tricked into running a malicious command—
+          it could potentially delete files in your Cloud Project or steal your database credentials.
+        </p>
+
+        <h2 is-upgraded><strong>The Solution: The GKE Sandbox</strong></h2>
+        <p>
+          We use <strong>Google Kubernetes Engine (GKE)</strong> to build a digital &#34;Safe Room&#34; (Sandbox). By using a
+          technology called <strong>gVisor</strong>, we ensure that the code is physically isolated. Even if the code
+          tries to &#34;break out&#34; and attack the computer it is running on, the Sandbox intercepts the attack and
+          shuts it down.
+        </p>
+      </google-codelab-step>
+
+      <google-codelab-step label="Defining the Pillars" duration="5">
+        <p>To understand this Codelab, you need to know three core components:</p>
+
+        <h2 is-upgraded><strong>Antigravity (The Brain)</strong></h2>
+        <p>
+          This is your AI Agent framework. It handles the logic, talks to the LLM (like Gemini), and decides when it&#39;s
+          time to run a script.
+        </p>
+
+        <h2 is-upgraded><strong>GKE (The Foundation)</strong></h2>
+        <p>
+          Google Kubernetes Engine is a platform that manages &#34;containers.&#34; Think of a container as a small, portable
+          box that holds everything your code needs to run. GKE is the manager that decides which server those boxes
+          should sit on.
+        </p>
+
+        <h2 is-upgraded><strong>The Sandbox (The Guard)</strong></h2>
+        <p>
+          Normally, all containers on a server share the same &#34;operating system kernel&#34; (the brain of the computer).
+          A Sandbox (specifically <strong>gVisor</strong>) creates a &#34;fake&#34; brain for each container. This way, the
+          container cannot see or touch the real computer&#39;s brain.
+        </p>
+      </google-codelab-step>
+
+      <google-codelab-step label="Step 1: Preparing your GCP Environment" duration="5">
+        <p>
+          We will use <strong>Google Cloud Shell</strong> for this lab. It is a pre-configured terminal in the cloud that
+          already has the tools we need.
+        </p>
+
+        <h2 is-upgraded><strong>Action: Initialise your project</strong></h2>
+        <ol type="1">
+          <li>Open the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a>.</li>
+          <li>Click the <strong>Activate Cloud Shell</strong> icon (<code>&gt;_</code>) in the top right corner.</li>
+          <li>Run the following command to ensure your project is set:</li>
+        </ol>
+
+        <pre><code>gcloud config set project [YOUR_PROJECT_ID]</code></pre>
+      </google-codelab-step>
+
+      <google-codelab-step label="Step 2: Creating the Sandbox-Enabled Cluster" duration="10">
+        <p>
+          We need to build a GKE cluster and tell it to prepare the servers with &#34;Security Glass&#34; (gVisor).
+        </p>
+
+        <h2 is-upgraded><strong>Action: Create the Cluster</strong></h2>
+        <p>Run this command in your Cloud Shell:</p>
+
+        <pre><code>gcloud container clusters create "antigravity-secure-cluster" \
+  --cluster=[CLUSTER_NAME] \
+  --location=[LOCATION] \
+  --machine-type=[MACHINE_TYPE] \
+  --threads-per-core=2 \
+  --sandbox type=gvisor</code></pre>
+
+        <h2 is-upgraded><strong>What is happening here?</strong></h2>
+        <ul>
+          <li><strong>--region "us-central1"</strong>: We are choosing where the servers physically live.</li>
+          <li><strong>--sandbox type=gvisor</strong>: This is the most important part. It installs the protective layer that isolates our AI agents.</li>
+        </ul>
+      </google-codelab-step>
+
+      <google-codelab-step label="Step 3: Setting the &#34;Safe Room&#34; Rules" duration="5">
+        <p>
+          In Kubernetes, we use a <strong>RuntimeClass</strong>. Think of this as a &#34;House Rule&#34; that tells the system:
+          &#34;Whenever I label a task as ‘Secure,&#39; use the Sandbox guard.&#34;
+        </p>
+
+        <h2 is-upgraded><strong>Action: Create the Rule</strong></h2>
+        <p>Create a file named httpd.yaml with the following contents:</p>
+
+        <pre><code>
+          # httpd.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpd
+  labels:
+    app: httpd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpd
+  template:
+    metadata:
+      labels:
+        app: httpd
+    spec:
+      runtimeClassName: gvisor
+      containers:
+      - name: httpd
+        image: httpd
+        </code></pre>
+
+        <p>Apply the rule to your cluster:</p>
+        <pre><code>kubectl apply -f httpd.yaml</code></pre>
+      </google-codelab-step>
+
+      <google-codelab-step label="Step 4: Building the Executor Room (The Pod)" duration="5">
+        <p>
+          Now we build the actual &#34;Room&#34; (called a <strong>Pod</strong>) where your Antigravity Agent will send its code.
+        </p>
+
+        <h2 is-upgraded><strong>Action: Create the Pod</strong></h2>
+        <p>Create a file named executor.yaml with contents similar to:</p>
+
+        <pre><code>apiVersion: v1
+kind: Pod
+metadata:
+  name: secure-executor-pod
+  labels:
+    app: agent-worker
+spec:
+  runtimeClassName: antigravity-sandbox # This triggers the gVisor isolation
+  containers:
+    - name: python-interpreter
+      image: python:3.11-slim
+      command: ["sleep", "infinity"] # This keeps the pod alive and waiting
+      resources:
+        limits:
+          memory: "256Mi" # Limits how much memory the AI can use
+          cpu: "500m"
+</code></pre>
+
+        <p>Apply the Pod:</p>
+        <pre><code>kubectl apply -f executor.yaml</code></pre>
+      </google-codelab-step>
+
+      <google-codelab-step label="Step 5: Testing the Security" duration="5">
+        <p>
+          Now, let&#39;s pretend to be the Antigravity Agent. We will send a Python script into the room and ask it to
+          describe the computer it sees.
+        </p>
+
+        <h2 is-upgraded><strong>Action: Run the Check</strong></h2>
+        <pre><code>kubectl exec secure-executor-pod -- python3 -c "import os; print(os.uname())"</code></pre>
+
+        <h2 is-upgraded><strong>The Discovery</strong></h2>
+        <p>
+          Look closely at the output. You will see the word <strong>&#34;gVisor&#34;</strong>. This proves that the Python
+          script is <strong>NOT</strong> seeing your actual Google Cloud server; it is seeing the &#34;fake brain&#34; created
+          by the Sandbox. The isolation is successful!
+        </p>
+      </google-codelab-step>
+
+      <google-codelab-step label="Step 6: Locking the Door (Network Lockdown)" duration="5">
+        <p>
+          Even if the room is secure, the AI might try to &#34;call home&#34; and send your data to an unknown website. We will
+          apply a <strong>Network Policy</strong> to block all internet access for this room.
+        </p>
+
+        <h2 is-upgraded><strong>Action: Create the Lock</strong></h2>
+        <p>Create <code>network-lock.yaml</code> with contents similar to:</p>
+
+        <pre><code>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all-egress
+spec:
+  podSelector:
+    matchLabels:
+      app: agent-worker
+  policyTypes:
+    - Egress
+# Empty Egress means nothing can leave the pod
+</code></pre>
+
+        <p>Apply the lock:</p>
+        <pre><code>kubectl apply -f network-lock.yaml</code></pre>
+      </google-codelab-step>
+
+      <google-codelab-step label="Conclusion &amp; Summary" duration="2">
+        <p>Congratulations! You have built a <strong>&#34;Zero-Trust&#34;</strong> environment for your AI Agent.</p>
+
+        <ul>
+          <li><strong>Antigravity</strong> writes the code.</li>
+          <li><strong>GKE</strong> provides the ground to run it.</li>
+          <li><strong>gVisor</strong> ensures that the code cannot attack the system.</li>
+          <li><strong>Network Policies</strong> ensure the code cannot leak your data.</li>
+        </ul>
+
+        <p>Keep exploring secure execution to make your AI agents enterprise-ready!</p>
+      </google-codelab-step>
+
+    </google-codelab>
+
+    <script src="https://storage.googleapis.com/claat-public/native-shim.js"></script>
+    <script src="https://storage.googleapis.com/claat-public/custom-elements.min.js"></script>
+    <script src="https://storage.googleapis.com/claat-public/prettify.js"></script>
+    <script src="https://storage.googleapis.com/claat-public/codelab-elements.js"></script>
+    <script src="//support.google.com/inapp/api.js"></script>
+  </body>
+</html>

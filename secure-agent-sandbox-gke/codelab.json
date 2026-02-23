@@ -1,0 +1,25 @@
+{
+  "environment": "web",
+  "format": "html",
+  "prefix": "https://storage.googleapis.com",
+  "mainga": "UA-49880327-14",
+  "updated": "2026-02-23T20:24:58+05:30",
+  "id": "secure-agent-sandbox-gke",
+  "duration": 47,
+  "title": "Running Agent Code Safely: Secure Sandbox Execution for Antigravity on GKE",
+  "authors": "Geeta Kakrani",
+  "summary": "Secure Sandbox Execution for Antigravity on GKE",
+  "source": "Agent2.md",
+  "theme": "",
+  "status": [
+    "published"
+  ],
+  "category": [
+    "ai",
+    "gke",
+    "security"
+  ],
+  "tags": [],
+  "feedback": "https://www.google.com/search?q=https://github.com/geetakakrani",
+  "url": "secure-agent-sandbox-gke"
+}
